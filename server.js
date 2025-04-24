@@ -1,4 +1,3 @@
-// backend/server.js
 const express = require('express');
 const dotenv = require('dotenv');
 const cors = require('cors');
@@ -10,8 +9,14 @@ dotenv.config();
 const app = express();
 const PORT = 5001;
 
+// ✅ CORS 허용 (Netlify 도메인 명시)
+app.use(cors({
+  origin: 'https://startling-meerkat-f970c5.netlify.app',
+  methods: ['GET', 'POST'],
+  credentials: false
+}));
+
 // 📡 Middleware
-app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
