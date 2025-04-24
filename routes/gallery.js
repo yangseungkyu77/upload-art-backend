@@ -8,7 +8,7 @@ const router = express.Router();
 
 // 🔐 Google OAuth 클라이언트 세팅
 const oauth2Client = new google.auth.OAuth2();
-const TOKEN_PATH = path.join(__dirname, '..', 'token.json');
+const TOKEN_PATH = '/etc/secrets/token.json';
 oauth2Client.setCredentials(JSON.parse(fs.readFileSync(TOKEN_PATH, 'utf-8')));
 const drive = google.drive({ version: 'v3', auth: oauth2Client });
 
