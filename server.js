@@ -9,12 +9,13 @@ dotenv.config();
 const app = express();
 const PORT = 5001;
 
-// ✅ CORS 허용 (Netlify 도메인 명시)
-app.use(cors({
+// ✅ CORS 허용 (Netlify 정식 도메인만)
+const corsOptions = {
   origin: 'https://startling-meerkat-f970c5.netlify.app',
   methods: ['GET', 'POST'],
   credentials: false
-}));
+};
+app.use(cors(corsOptions));
 
 // 📡 Middleware
 app.use(express.json());
