@@ -53,6 +53,7 @@ async function getOrCreateUserFolder(username) {
 }
 
 // 🚀 업로드 라우트
+// ... 기존 코드 생략 ...
 router.post('/upload', upload.array('images'), async (req, res) => {
   const { name } = req.body;
   const files = req.files;
@@ -68,47 +69,53 @@ router.post('/upload', upload.array('images'), async (req, res) => {
     const urls = [];
 
     for (const file of files) {
-      const originalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
+      try {
+        const originalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
+        const metadata = {
+          name: originalName,
+          parents: [folderId]
+        };
+        const media = {
+          mimeType: file.mimetype,
+          body: fs.createReadStream(file.path)
+        };
 
-      const metadata = {
-        name: originalName,
-        parents: [folderId]
-      };
+        const uploadRes = await drive.files.create({
+          resource: metadata,
+          media,
+          fields: 'id'
+        });
 
-      const media = {
-        mimeType: file.mimetype,
-        body: fs.createReadStream(file.path)
-      };
+        const fileId = uploadRes.data.id;
 
-      const uploadRes = await drive.files.create({
-        resource: metadata,
-        media,
-        fields: 'id'
-      });
+        await drive.permissions.create({
+          fileId,
+          requestBody: { role: 'reader', type: 'anyone' }
+        });
 
-      const fileId = uploadRes.data.id;
+        const publicUrl = `https://drive.google.com/uc?export=view&id=${fileId}`;
+        urls.push(publicUrl);
 
-      await drive.permissions.create({
-        fileId,
-        requestBody: {
-          role: 'reader',
-          type: 'anyone'
-        }
-      });
-
-      const publicUrl = `https://drive.google.com/uc?export=view&id=${fileId}`;
-      urls.push(publicUrl);
-
-      fs.unlinkSync(file.path);
-      console.log(`✅ ${originalName} 업로드 완료: ${publicUrl}`);
+        console.log(`✅ ${originalName} 업로드 완료: ${publicUrl}`);
+      } catch (err) {
+        console.error(`❌ 파일 업로드 실패: ${file.originalname}`, err.message);
+      } finally {
+        fs.unlinkSync(file.path); // ✅ 임시파일 삭제
+      }
     }
 
-    res.json({ success: true, urls });
+    // ✅ 모든 이미지 실패한 경우
+    if (urls.length === 0) {
+      return res.status(500).json({ success: false, message: '업로드 실패 (모든 파일 오류)' });
+    }
+
+    return res.json({ success: true, urls });
 
   } catch (err) {
-    console.error('❌ 업로드 실패:', err.message);
-    res.status(500).json({ success: false, message: '업로드 중 오류 발생' });
+    console.error('❌ 전체 업로드 실패:', err.message);
+    res.status(500).json({ success: false, message: '업로드 처리 중 오류 발생' });
   }
 });
+
 
 module.exports = router;
