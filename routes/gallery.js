@@ -38,7 +38,7 @@ router.get('/:username', async (req, res) => {
 
   try {
     const userFolderId = await getUserFolderId(username);
-    if (!userFolderId) return res.json({ success: true, urls: [] });
+    if (!userFolderId) return res.json({ success: true, urls: [], folderLink: null });
 
     const response = await drive.files.list({
       q: `'${userFolderId}' in parents and trashed = false`,
@@ -51,7 +51,12 @@ router.get('/:username', async (req, res) => {
       url: `https://drive.google.com/uc?id=${file.id}`,
     }));
 
-    res.json({ success: true, urls });
+    // 📦 폴더 링크도 함께 반환
+    res.json({
+      success: true,
+      urls,
+      folderLink: `https://drive.google.com/drive/folders/${userFolderId}`
+    });
   } catch (err) {
     console.error('❌ 갤러리 로딩 오류:', err.message);
     res.status(500).json({ success: false, message: '갤러리 로딩 실패' });
