@@ -1,9 +1,8 @@
 const express = require('express');
-const router = express.Router(); // ✅ 누락되었던 router 선언 복원
-const multer = require('multer');
+const router = express.Router();
+const { google } = require('googleapis');
 const fs = require('fs');
 const path = require('path');
-const { google } = require('googleapis');
 
 // 🔐 Google OAuth2 클라이언트
 const oauth2Client = new google.auth.OAuth2(
@@ -12,108 +11,51 @@ const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_REDIRECT_URI
 );
 
-// 📁 토큰 세팅
+// 🔑 token.json 로드
 const TOKEN_PATH = path.join(__dirname, '..', 'token.json');
 if (!fs.existsSync(TOKEN_PATH)) {
-  console.error('❌ token.json 없음. 먼저 인증을 완료하세요.');
+  console.error('❌ token.json 없음');
   process.exit(1);
 }
 oauth2Client.setCredentials(JSON.parse(fs.readFileSync(TOKEN_PATH, 'utf-8')));
 const drive = google.drive({ version: 'v3', auth: oauth2Client });
 
-// ⚙️ multer 설정
-const upload = multer({ dest: 'uploads/' });
-
-// 📁 유저 폴더 생성 or 조회
-async function getOrCreateUserFolder(username) {
-  const parentId = process.env.GOOGLE_DRIVE_FOLDER_ID;
-
-  const result = await drive.files.list({
-    q: `'${parentId}' in parents and name='${username}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
-    fields: 'files(id)',
-    spaces: 'drive'
-  });
-
-  if (result.data.files.length > 0) {
-    return result.data.files[0].id;
-  }
-
-  const folderMetadata = {
-    name: username,
-    mimeType: 'application/vnd.google-apps.folder',
-    parents: [parentId]
-  };
-
-  const folder = await drive.files.create({
-    resource: folderMetadata,
-    fields: 'id'
-  });
-
-  return folder.data.id;
-}
-
-// 🚀 업로드 라우트
-router.post('/upload', upload.array('images'), async (req, res) => {
-  const { name } = req.body;
-  const files = req.files;
-
-  console.log("🔥 업로드 요청:", name);
-
-  if (!name || !files || files.length === 0) {
-    return res.status(400).json({ success: false, message: '이름과 이미지가 필요합니다.' });
-  }
+// 📂 사용자 이름 폴더 기반 이미지 조회
+router.get('/:username', async (req, res) => {
+  const { username } = req.params;
 
   try {
-    const folderId = await getOrCreateUserFolder(name);
-    const successList = [];
-    const failList = [];
+    const parentId = process.env.GOOGLE_DRIVE_FOLDER_ID;
 
-    for (const file of files) {
-      try {
-        const originalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
-        const metadata = {
-          name: originalName,
-          parents: [folderId]
-        };
-        const media = {
-          mimeType: file.mimetype,
-          body: fs.createReadStream(file.path)
-        };
+    // 📁 사용자 폴더 조회
+    const folderList = await drive.files.list({
+      q: `'${parentId}' in parents and name='${username}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+      fields: 'files(id)',
+      spaces: 'drive',
+    });
 
-        const uploadRes = await drive.files.create({
-          resource: metadata,
-          media,
-          fields: 'id'
-        });
-
-        const fileId = uploadRes.data.id;
-
-        await drive.permissions.create({
-          fileId,
-          requestBody: { role: 'reader', type: 'anyone' }
-        });
-
-        const publicUrl = `https://drive.google.com/uc?export=view&id=${fileId}`;
-        successList.push(originalName);
-
-        console.log(`✅ ${originalName} 업로드 완료: ${publicUrl}`);
-      } catch (err) {
-        console.error(`❌ 파일 업로드 실패: ${file.originalname}`, err.message);
-        failList.push(file.originalname);
-      } finally {
-        fs.unlinkSync(file.path); // 임시 파일 제거
-      }
+    if (folderList.data.files.length === 0) {
+      return res.status(404).json({ success: false, message: '해당 이름의 폴더가 없습니다.' });
     }
 
-    if (successList.length === 0) {
-      return res.status(500).json({ success: false, message: '업로드 실패 (모든 파일 오류)', successList, failList });
-    }
+    const folderId = folderList.data.files[0].id;
 
-    return res.json({ success: true, successList, failList });
+    // 🖼️ 폴더 내 이미지 검색
+    const imageList = await drive.files.list({
+      q: `'${folderId}' in parents and mimeType contains 'image/' and trashed = false`,
+      fields: 'files(id, name)',
+      spaces: 'drive',
+    });
+
+    const urls = imageList.data.files.map(file =>
+      `https://drive.google.com/uc?export=view&id=${file.id}`
+    );
+
+    return res.json({ success: true, urls });
 
   } catch (err) {
-    console.error('❌ 전체 업로드 실패:', err.message);
-    res.status(500).json({ success: false, message: '업로드 처리 중 오류 발생' });
+    console.error('❌ 갤러리 조회 오류:', err.message);
+    return res.status(500).json({ success: false, message: '서버 오류: 갤러리를 불러오지 못했습니다.' });
   }
 });
 
