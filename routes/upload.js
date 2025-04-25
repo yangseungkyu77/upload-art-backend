@@ -1,3 +1,4 @@
+// backend/routes/upload.js
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
@@ -93,30 +94,23 @@ router.post('/upload', upload.array('images'), async (req, res) => {
           requestBody: { role: 'reader', type: 'anyone' }
         });
 
-        console.log(`✅ ${originalName} 업로드 완료: https://drive.google.com/uc?export=view&id=${fileId}`);
+        const publicUrl = `https://drive.google.com/uc?export=view&id=${fileId}`;
         successList.push(originalName);
+
+        console.log(`✅ ${originalName} 업로드 완료: ${publicUrl}`);
       } catch (err) {
         console.error(`❌ 파일 업로드 실패: ${file.originalname}`, err.message);
         failList.push(file.originalname);
       } finally {
-        fs.unlinkSync(file.path); // 임시파일 삭제
+        fs.unlinkSync(file.path); // 임시 파일 제거
       }
     }
 
     if (successList.length === 0) {
-      return res.status(500).json({
-        success: false,
-        message: '업로드 실패 (모든 파일 오류)',
-        successList,
-        failList
-      });
+      return res.status(500).json({ success: false, message: '업로드 실패 (모든 파일 오류)', successList, failList });
     }
 
-    return res.json({
-      success: true,
-      successList,
-      failList
-    });
+    return res.json({ success: true, successList, failList });
 
   } catch (err) {
     console.error('❌ 전체 업로드 실패:', err.message);
