@@ -4,6 +4,22 @@ const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
 const { google } = require('googleapis');
+const dotenv = require('dotenv');
+dotenv.config(); // ✅ .env 환경변수 로딩
+
+// ✅ token.json 자동 생성
+const TOKEN_PATH = path.join(__dirname, '..', 'token.json');
+if (!fs.existsSync(TOKEN_PATH)) {
+  const tokenData = {
+    access_token: process.env.GOOGLE_ACCESS_TOKEN,
+    refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
+    scope: "https://www.googleapis.com/auth/drive.file",
+    token_type: "Bearer",
+    expiry_date: Date.now() + 1000 * 60 * 60 * 1 // 1시간
+  };
+  fs.writeFileSync(TOKEN_PATH, JSON.stringify(tokenData, null, 2));
+  console.log('✅ token.json 자동 생성 완료');
+}
 
 // 🔐 Google OAuth2 클라이언트
 const oauth2Client = new google.auth.OAuth2(
@@ -11,13 +27,6 @@ const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_SECRET,
   process.env.GOOGLE_REDIRECT_URI
 );
-
-// 📁 토큰 세팅
-const TOKEN_PATH = path.join(__dirname, '..', 'token.json');
-if (!fs.existsSync(TOKEN_PATH)) {
-  console.error('❌ token.json 없음. 먼저 인증을 완료하세요.');
-  process.exit(1);
-}
 oauth2Client.setCredentials(JSON.parse(fs.readFileSync(TOKEN_PATH, 'utf-8')));
 const drive = google.drive({ version: 'v3', auth: oauth2Client });
 
@@ -34,9 +43,7 @@ async function getOrCreateUserFolder(username) {
     spaces: 'drive'
   });
 
-  if (result.data.files.length > 0) {
-    return result.data.files[0].id;
-  }
+  if (result.data.files.length > 0) return result.data.files[0].id;
 
   const folderMetadata = {
     name: username,
@@ -71,10 +78,7 @@ router.post('/upload', upload.array('images'), async (req, res) => {
     for (const file of files) {
       try {
         const originalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
-        const metadata = {
-          name: originalName,
-          parents: [folderId]
-        };
+        const metadata = { name: originalName, parents: [folderId] };
         const media = {
           mimeType: file.mimetype,
           body: fs.createReadStream(file.path)
@@ -95,14 +99,13 @@ router.post('/upload', upload.array('images'), async (req, res) => {
 
         const publicUrl = `https://drive.google.com/uc?export=view&id=${fileId}`;
         successList.push(originalName);
-
         console.log(`✅ ${originalName} 업로드 완료: ${publicUrl}`);
       } catch (err) {
         console.error(`❌ 파일 업로드 실패: ${file.originalname}`, err.message);
         console.error('📛 상세 오류:', err.stack);
         failList.push(file.originalname);
       } finally {
-        fs.unlinkSync(file.path); // 임시 파일 제거
+        fs.unlinkSync(file.path);
       }
     }
 
