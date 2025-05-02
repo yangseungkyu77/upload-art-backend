@@ -7,19 +7,17 @@ const { google } = require('googleapis');
 const dotenv = require('dotenv');
 dotenv.config(); // ✅ .env 환경변수 로딩
 
-// ✅ token.json 자동 생성
+// ✅ token.json 무조건 최신 환경변수로 재생성
 const TOKEN_PATH = path.join(__dirname, '..', 'token.json');
-if (!fs.existsSync(TOKEN_PATH)) {
-  const tokenData = {
-    access_token: process.env.GOOGLE_ACCESS_TOKEN,
-    refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
-    scope: "https://www.googleapis.com/auth/drive.file",
-    token_type: "Bearer",
-    expiry_date: Date.now() + 1000 * 60 * 60 * 1 // 1시간
-  };
-  fs.writeFileSync(TOKEN_PATH, JSON.stringify(tokenData, null, 2));
-  console.log('✅ token.json 자동 생성 완료');
-}
+const tokenData = {
+  access_token: process.env.GOOGLE_ACCESS_TOKEN,
+  refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
+  scope: "https://www.googleapis.com/auth/drive.file",
+  token_type: "Bearer",
+  expiry_date: Date.now() + 1000 * 60 * 60 * 1 // 1시간
+};
+fs.writeFileSync(TOKEN_PATH, JSON.stringify(tokenData, null, 2));
+console.log('🔄 token.json 생성됨 (항상 최신 환경변수 기반)');
 
 // 🔐 Google OAuth2 클라이언트
 const oauth2Client = new google.auth.OAuth2(
@@ -29,6 +27,12 @@ const oauth2Client = new google.auth.OAuth2(
 );
 oauth2Client.setCredentials(JSON.parse(fs.readFileSync(TOKEN_PATH, 'utf-8')));
 const drive = google.drive({ version: 'v3', auth: oauth2Client });
+
+// ✅ 인증 상태 디버깅 출력
+console.log("🧪 현재 OAuth2 인증 상태:");
+console.log("🔑 access_token:", oauth2Client.credentials.access_token ? "존재함" : "❌ 없음");
+console.log("🔁 refresh_token:", oauth2Client.credentials.refresh_token ? "존재함" : "❌ 없음");
+console.log("⏰ expiry_date:", new Date(oauth2Client.credentials.expiry_date).toISOString());
 
 // ⚙️ multer 설정
 const upload = multer({ dest: 'uploads/' });
