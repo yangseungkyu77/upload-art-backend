@@ -7,7 +7,9 @@ const path = require('path');
 dotenv.config();
 
 const app = express();
-const PORT = 5001;
+
+// ✅ Render 호환을 위한 동적 포트 설정
+const PORT = process.env.PORT || 5001;
 
 // ✅ CORS 허용 (Netlify 정식 도메인만)
 const corsOptions = {
@@ -35,6 +37,15 @@ app.use('/api', uploadRoutes);
 
 const oauthRoutes = require('./routes/oauth');
 app.use('/api/oauth', oauthRoutes);
+
+// ❗ 글로벌 에러 핸들러 (500 문제 디버깅용)
+app.use((err, req, res, next) => {
+  console.error("🔥 서버 에러:", err.message);
+  res.status(500).json({
+    error: 'Internal Server Error',
+    details: err.message
+  });
+});
 
 // 🧿 서버 실행
 app.listen(PORT, () => {
