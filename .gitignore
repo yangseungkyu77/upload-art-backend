@@ -1,8 +1,10 @@
 # 👉 Node.js 의존성 모듈
 node_modules/
 
-# 👉 환경변수 및 민감정보 (token.json 제외)
+# 👉 환경변수 및 민감정보
 .env
+.env.*
+token.json
 config/credentials.json
 userDB.json
 
@@ -11,3 +13,4 @@ uploads/
 
 # 👉 macOS에서 자동 생성되는 파일
 .DS_Store
+
