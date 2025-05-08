@@ -5,40 +5,28 @@ const fs = require('fs');
 const path = require('path');
 const { google } = require('googleapis');
 const dotenv = require('dotenv');
-dotenv.config(); // ✅ .env 환경변수 로딩
+dotenv.config();
 
-// ✅ token.json 무조건 최신 환경변수로 재생성
-const TOKEN_PATH = path.join(__dirname, '..', 'token.json');
-const tokenData = {
-  access_token: process.env.GOOGLE_ACCESS_TOKEN,
-  refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
-  scope: "https://www.googleapis.com/auth/drive.file",
-  token_type: "Bearer",
-  expiry_date: Date.now() + 1000 * 60 * 60 * 1 // 1시간
-};
-fs.writeFileSync(TOKEN_PATH, JSON.stringify(tokenData, null, 2));
-console.log('🔄 token.json 생성됨 (항상 최신 환경변수 기반)');
+const upload = multer({ dest: 'uploads/' });
 
-// 🔐 Google OAuth2 클라이언트
+// 🔐 OAuth2 클라이언트 설정
 const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_ID,
   process.env.GOOGLE_CLIENT_SECRET,
   process.env.GOOGLE_REDIRECT_URI
 );
-oauth2Client.setCredentials(JSON.parse(fs.readFileSync(TOKEN_PATH, 'utf-8')));
-const drive = google.drive({ version: 'v3', auth: oauth2Client });
+oauth2Client.setCredentials({
+  refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
+});
 
-// ✅ 인증 상태 디버깅 출력
-console.log("🧪 현재 OAuth2 인증 상태:");
-console.log("🔑 access_token:", oauth2Client.credentials.access_token ? "존재함" : "❌ 없음");
-console.log("🔁 refresh_token:", oauth2Client.credentials.refresh_token ? "존재함" : "❌ 없음");
-console.log("⏰ expiry_date:", new Date(oauth2Client.credentials.expiry_date).toISOString());
-
-// ⚙️ multer 설정
-const upload = multer({ dest: 'uploads/' });
+// 🧠 최신 access_token 기반 Google Drive 클라이언트 생성
+async function getDriveClient() {
+  await oauth2Client.getAccessToken(); // access_token 자동 재발급
+  return google.drive({ version: 'v3', auth: oauth2Client });
+}
 
 // 📁 유저 폴더 생성 or 조회
-async function getOrCreateUserFolder(username) {
+async function getOrCreateUserFolder(drive, username) {
   const parentId = process.env.GOOGLE_DRIVE_FOLDER_ID;
 
   const result = await drive.files.list({
@@ -75,7 +63,9 @@ router.post('/upload', upload.array('images'), async (req, res) => {
   }
 
   try {
-    const folderId = await getOrCreateUserFolder(name);
+    const drive = await getDriveClient(); // 최신 토큰 기반 클라이언트
+
+    const folderId = await getOrCreateUserFolder(drive, name);
     const successList = [];
     const failList = [];
 
@@ -106,7 +96,6 @@ router.post('/upload', upload.array('images'), async (req, res) => {
         console.log(`✅ ${originalName} 업로드 완료: ${publicUrl}`);
       } catch (err) {
         console.error(`❌ 파일 업로드 실패: ${file.originalname}`, err.message);
-        console.error('📛 상세 오류:', err.stack);
         failList.push(file.originalname);
       } finally {
         fs.unlinkSync(file.path);
@@ -126,12 +115,10 @@ router.post('/upload', upload.array('images'), async (req, res) => {
 
   } catch (err) {
     console.error('❌ 전체 업로드 실패:', err.message);
-    console.error('📛 전체 스택:', err.stack);
     res.status(500).json({
       success: false,
       message: '업로드 처리 중 오류 발생',
-      error: err.message,
-      stack: err.stack
+      error: err.message
     });
   }
 });
